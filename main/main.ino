@@ -84,9 +84,10 @@ void loop() {
   // int freq = random(2000, 4000);
   tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
 
+  String url = String(SERVER_IP) + String(SERVER_PORT) + "/user/1";
   
-  http.begin(SERVER_IP + SERVER_PORT + "/ping");
-  http.setTimeout(5000);
+  http.begin(url);
+  http.setTimeout(10000);
   // http.begin("https://www.timeapi.io/api/time/current/zone?timeZone=Europe%2FBerlin");
   int httpCode = http.GET();
   if (httpCode > 0) {
@@ -95,36 +96,23 @@ void loop() {
       String payload = http.getString();
       Serial.println(payload);
       
-      StaticJsonDocument<512> doc;  // Adjust the size if needed
+      JsonDocument doc;  // Adjust the size if needed
       DeserializationError error = deserializeJson(doc, payload);
       // Check if the parsing was successful
       if (error) {
         Serial.print("Failed to parse JSON: ");
         Serial.println(error.f_str());
       } else {
-        // Extract the date and time from the JSON
-        // const char* date = doc["date"];  // Extract the "date"
-        // const char* time = doc["time"];  // Extract the "time"
-        
-        // // Print the extracted values
-        // Serial.print("Date: ");
-        // Serial.println(date);
-        // Serial.print("Time: ");
-        // Serial.println(time);
-        const char* date = doc["data"]["timestamp"];  // Extract the "date"
+        const int id = doc["id"];
+        const char* hex_uid = doc["hex_uid"];
+        const char* name = doc["name"];
 
-        // Display on the LCD (if applicable)
-        lcd.clear();
-        // lcd.setCursor(0, 0);
-        // lcd.print("Date: ");
-        // lcd.print(date);  // Display the date
-        // lcd.setCursor(0, 1);
-        // lcd.print("Time: ");
-        // lcd.print(time);  // Display the time
-        lcd.setCursor(0, 0);
-        lcd.print("timestamp: ");
-        lcd.setCursor(0, 1);
-        lcd.print(date);  // Display the date
+        Serial.print(id);
+        Serial.print(", ");
+        Serial.print(hex_uid);
+        Serial.print(", ");
+        Serial.println(name);
+        // Serial.println("This would print each property.");
       }
       
     } else {
