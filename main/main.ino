@@ -5,11 +5,9 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include "config.h"   // local file for WiFi and server credentials
 
-  const char* WIFI_SSID = "r1";
-  const char* WIFI_PASSWORD = "yiKeUtRnbZSbWVXO";
-
-// const char* WIFI_SSID = "BS24-BYOD";
+IPAddress ip;
 
 HTTPClient http;
 
@@ -49,6 +47,9 @@ void setup() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
+  ip = WiFi.localIP();
+  Serial.print("Local IP: ");
+  Serial.println(ip);
 
   SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
   mfrc522.PCD_Init();   // start RC522 (RFID scanner)
@@ -84,7 +85,8 @@ void loop() {
   tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
 
   
-  http.begin("192.168.1.175:3000/ping");
+  http.begin(SERVER_IP + SERVER_PORT + "/ping");
+  http.setTimeout(5000);
   // http.begin("https://www.timeapi.io/api/time/current/zone?timeZone=Europe%2FBerlin");
   int httpCode = http.GET();
   if (httpCode > 0) {
@@ -130,7 +132,7 @@ void loop() {
       Serial.printf("[HTTP] GET... code: %d\n", httpCode);
     }
   } else {
-    Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
   }
   http.end();
   
