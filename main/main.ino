@@ -71,7 +71,9 @@ void loop() {
 
   // Loop through the scanned UID bytes
   for (byte i = 0; i < mfrc522.uid.size; i++) {
-    uid += (mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");  // Adds a leading space for single digits
+    if (mfrc522.uid.uidByte[i] < 0x10) {
+      uid += "0"; // Adds a leading space for single digits
+    }
     uid += String(mfrc522.uid.uidByte[i], HEX);  // Convert byte to hex and append to string
   }
 
@@ -84,46 +86,7 @@ void loop() {
   // int freq = random(2000, 4000);
   tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
 
-  String url = String(SERVER_IP) + String(SERVER_PORT) + "/user/1";
-  
-  http.begin(url);
-  http.setTimeout(10000);
-  // http.begin("https://www.timeapi.io/api/time/current/zone?timeZone=Europe%2FBerlin");
-  int httpCode = http.GET();
-  if (httpCode > 0) {
-    // file found at server
-    if (httpCode == HTTP_CODE_OK) {
-      String payload = http.getString();
-      Serial.println(payload);
-      
-      JsonDocument doc;  // Adjust the size if needed
-      DeserializationError error = deserializeJson(doc, payload);
-      // Check if the parsing was successful
-      if (error) {
-        Serial.print("Failed to parse JSON: ");
-        Serial.println(error.f_str());
-      } else {
-        const int id = doc["id"];
-        const char* hex_uid = doc["hex_uid"];
-        const char* name = doc["name"];
-
-        Serial.print(id);
-        Serial.print(", ");
-        Serial.print(hex_uid);
-        Serial.print(", ");
-        Serial.println(name);
-        // Serial.println("This would print each property.");
-      }
-      
-    } else {
-      // HTTP header has been send and Server response header has been handled
-      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-    }
-  } else {
-    Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
-  }
-  http.end();
-  
+  httpPostRFID(uid);
 
   delay(2000);
 
@@ -132,4 +95,32 @@ void loop() {
   lcd.print("Scan RFID");
 
   mfrc522.PICC_HaltA();
+}
+
+void httpPostRFID(String uid) {
+  String url = String(SERVER_IP) + String(SERVER_PORT) + "/check";
+
+  JsonDocument doc;
+  doc["hex_uid"] = uid;
+  String payload;
+  serializeJson(doc, payload);
+
+  http.begin(url);
+  http.setTimeout(10000);
+  
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.POST(payload);  // user_id: (required)
+                                      // date_time: (optional)
+  if (httpCode <= 0) {
+    Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+    return;
+  }
+
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+    return;
+  }
+
+  http.end();
 }
