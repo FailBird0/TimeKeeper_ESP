@@ -20,26 +20,19 @@ HTTPClient http;
 #define LCD_SDA_PIN 21
 #define LCD_SCL_PIN 22
 
-/*
- *  RFID: SDA (SS) => GPIO 5
- *  RFID: RST => GPIO 13
- *  RFID: SCK => GPIO 18
- *  RFID: MISO => GPIO 19
- *  RFID: MOSI => GPIO 23
- *  PIEZO => GPIO 16
- *  LCD: SDA => GPIO 21
- *  LCD: SCL => GPIO 22
-*/
-
 // set LCD address, number of columns and rows
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-MFRC522 mfrc522(RFID_SS_PIN, RFID_RST_PIN);  // declaring RFID scanner
+// declaring RFID scanner
+MFRC522 mfrc522(RFID_SS_PIN, RFID_RST_PIN);
 
 void setup() {
+  // set I2C connection for LCD data & clock pins
   Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+
   Serial.begin(115200);
 
+  // global variables from config.h
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -47,16 +40,19 @@ void setup() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
+
   ip = WiFi.localIP();
   Serial.print("Local IP: ");
   Serial.println(ip);
 
+  // use SPI for RFID scanner
   SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
   mfrc522.PCD_Init();   // start RC522 (RFID scanner)
   Serial.println("RFID-Scanner started.");
 
+  // start LCD
   lcd.init();
-  lcd.backlight(); // start lcd
+  lcd.backlight();
   lcd.clear();
   
   lcd.setCursor(0, 0);
@@ -72,7 +68,7 @@ void loop() {
   // Loop through the scanned UID bytes
   for (byte i = 0; i < mfrc522.uid.size; i++) {
     if (mfrc522.uid.uidByte[i] < 0x10) {
-      uid += "0"; // Adds a leading space for single digits
+      uid += "0"; // Adds a zero for single hex characters
     }
     uid += String(mfrc522.uid.uidByte[i], HEX);  // Convert byte to hex and append to string
   }
@@ -83,7 +79,6 @@ void loop() {
   lcd.setCursor(0, 1);
   lcd.print(uid);
   
-  // int freq = random(2000, 4000);
   tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
 
   httpPostRFID(uid);
@@ -98,25 +93,30 @@ void loop() {
 }
 
 void httpPostRFID(String uid) {
+  // link to API interface
   String url = String(SERVER_IP) + String(SERVER_PORT) + "/check";
 
   JsonDocument doc;
   doc["hex_uid"] = uid;
   String payload;
-  serializeJson(doc, payload);
+  serializeJson(doc, payload);  // converts doc into JSON, puts into payload as string
 
   http.begin(url);
   http.setTimeout(10000);
   
+  // !!! important
   http.addHeader("Content-Type", "application/json");
 
-  int httpCode = http.POST(payload);  // user_id: (required)
+  int httpCode = http.POST(payload);  // user_id: (optional)
+                                      // hex_uid: (optional) though one of two needed
                                       // date_time: (optional)
+  // ESP error / WiFi connection
   if (httpCode <= 0) {
     Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
     return;
   }
 
+  // 4xx: server error, 2xx okay
   if (httpCode != HTTP_CODE_OK) {
     Serial.printf("[HTTP] GET... code: %d\n", httpCode);
     return;
