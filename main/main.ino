@@ -116,7 +116,7 @@ void httpPostRFID(String uid) {
     return;
   }
 
-  // 4xx: server error, 2xx okay
+  // 5xx: server error, 4xx: client error, 2xx okay
   if (httpCode != HTTP_CODE_OK) {
     Serial.printf("[HTTP] GET... code: %d\n", httpCode);
     return;
