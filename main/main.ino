@@ -120,6 +120,8 @@ void httpPostRFID(String uid) {
   int retries = 0;
   int maxRetries = 5;
 
+  bool success = false;
+
   while (retries != maxRetries) {
     Serial.printf("Attempting HTTP request (%d)\n", retries);
 
@@ -137,6 +139,7 @@ void httpPostRFID(String uid) {
       // 200 - 299: success
       Serial.println("[HTTP] GET... success!");
       lcd.print("Success");
+      success = true;
       break; // do not retry, continue function
     } else if (httpCode >= 400 && httpCode <= 499) {
       // 400 - 499: client error
@@ -157,6 +160,18 @@ void httpPostRFID(String uid) {
       // idk what to do with 300-399 & 100-199
       break;
     }
+  }
+
+  if (success) {
+    String response = http.getString();
+    JsonDocument resultDoc;
+    deserializeJson(resultDoc, response);
+
+    const char* userName = resultDoc["data"]["user"]["name"];
+    Serial.println(userName);
+
+    lcd.setCursor(0, 0);
+    lcd.print(String(userName) + "                ");
   }
 
   delay(2000);
