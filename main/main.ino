@@ -86,8 +86,6 @@ void loop() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(uid);
-  
-  tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
 
   httpPostRFID(uid);
 
@@ -172,6 +170,10 @@ void httpPostRFID(String uid) {
 
     lcd.setCursor(0, 0);
     lcd.print(String(userName) + "                ");
+    
+    tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
+  } else {
+    tone(PIEZO_PIN, 2000, 300); // evil tone
   }
 
   delay(2000);
