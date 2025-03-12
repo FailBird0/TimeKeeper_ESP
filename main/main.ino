@@ -31,6 +31,14 @@ void setup() {
   Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
 
   Serial.begin(115200);
+  
+  // start LCD
+  lcd.init();
+  lcd.backlight();
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Connecting...");
 
   // global variables from config.h
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -40,8 +48,15 @@ void setup() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
-
+  
   ip = WiFi.localIP();
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("WiFi Connected.");
+  lcd.setCursor(0, 1);
+  lcd.print(ip);
+
   Serial.print("Local IP: ");
   Serial.println(ip);
 
@@ -49,14 +64,9 @@ void setup() {
   SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
   mfrc522.PCD_Init();   // start RC522 (RFID scanner)
   Serial.println("RFID-Scanner started.");
-
-  // start LCD
-  lcd.init();
-  lcd.backlight();
-  lcd.clear();
   
   lcd.setCursor(0, 0);
-  lcd.print("Scan RFID");
+  lcd.print("Scan RFID       ");
 }
 
 void loop() {
@@ -75,15 +85,13 @@ void loop() {
 
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("UID:");
-  lcd.setCursor(0, 1);
   lcd.print(uid);
   
   tone(PIEZO_PIN, 2800, 150); // (pin, frequency, duration in ms)
 
   httpPostRFID(uid);
 
-  delay(2000);
+  delay(500);
 
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -107,20 +115,50 @@ void httpPostRFID(String uid) {
   // !!! important
   http.addHeader("Content-Type", "application/json");
 
-  int httpCode = http.POST(payload);  // user_id: (optional)
-                                      // hex_uid: (optional) though one of two needed
-                                      // date_time: (optional)
-  // ESP error / WiFi connection
-  if (httpCode <= 0) {
-    Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
-    return;
+  int httpCode;
+
+  int retries = 0;
+  int maxRetries = 5;
+
+  while (retries != maxRetries) {
+    Serial.printf("Attempting HTTP request (%d)\n", retries);
+
+    httpCode = http.POST(payload);  // user_id: (optional)
+                                        // hex_uid: (optional) though one of two needed
+                                        // date_time: (optional)
+    lcd.setCursor(0, 1);
+
+    if (httpCode <= 0) {
+      // -11 - 0: ESP error / WiFi connection / server offline
+      Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+      retries++;
+      continue; // retry with new while iteration
+    } else if (httpCode >= 200 && httpCode <= 299) {
+      // 200 - 299: success
+      Serial.println("[HTTP] GET... success!");
+      lcd.print("Success");
+      break; // do not retry, continue function
+    } else if (httpCode >= 400 && httpCode <= 499) {
+      // 400 - 499: client error
+      Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+      if (httpCode == 400) {  // server USUALLY responds with a Bad Request 400
+        lcd.print("RFID not in DB");
+        delay(3000);
+      } else {
+        lcd.print("Client Error");
+      }
+      break; // do not retry, continue function
+    } else if (httpCode >= 500 && httpCode <= 599) {
+      // 500 - 599: server error
+      Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+      retries++;
+      continue; // retry with new while iteration
+    } else {
+      // idk what to do with 300-399 & 100-199
+      break;
+    }
   }
 
-  // 5xx: server error, 4xx: client error, 2xx okay
-  if (httpCode != HTTP_CODE_OK) {
-    Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-    return;
-  }
-
+  delay(2000);
   http.end();
 }
