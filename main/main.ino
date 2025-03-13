@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "config.h"   // local file for WiFi and server credentials
@@ -26,9 +27,35 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 // declaring RFID scanner
 MFRC522 mfrc522(RFID_SS_PIN, RFID_RST_PIN);
 
+const char* cert = R"(
+-----BEGIN CERTIFICATE-----
+
+-----END CERTIFICATE-----
+)";
+
 void setup() {
   // set I2C connection for LCD data & clock pins
   Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+
+  // // initialize file system
+  // if (!SPIFFS.begin()) {
+  //   Serial.println("SPIFFS mount failed");
+  //   return;
+  // }
+
+  // // Load CA certificate
+  // File certFile = SPIFFS.open(CERTIFICATE_PATH, "r");
+  // if (!certFile) {
+  //   Serial.println("Failed to open cert file");
+  //   return;
+  // }
+
+  // // Read certificate into cert variable
+  // cert = "";
+  // while (certFile.available()) {
+  //   cert += (char)certFile.read();
+  // }
+  // certFile.close();
 
   Serial.begin(115200);
   
@@ -99,6 +126,11 @@ void loop() {
 }
 
 void httpPostRFID(String uid) {
+  // set CA certificate for request
+  WiFiClientSecure client;
+  client.setCACert(cert);
+  Serial.println(cert);
+
   // link to API interface
   String url = String(SERVER_IP) + String(SERVER_PORT) + "/check";
 
@@ -107,7 +139,7 @@ void httpPostRFID(String uid) {
   String payload;
   serializeJson(doc, payload);  // converts doc into JSON, puts into payload as string
 
-  http.begin(url);
+  http.begin(client, url);
   http.setTimeout(10000);
   
   // !!! important
@@ -130,18 +162,19 @@ void httpPostRFID(String uid) {
 
     if (httpCode <= 0) {
       // -11 - 0: ESP error / WiFi connection / server offline
-      Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+      Serial.printf("[HTTP] POST... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
       retries++;
+      delay(100);
       continue; // retry with new while iteration
     } else if (httpCode >= 200 && httpCode <= 299) {
       // 200 - 299: success
-      Serial.println("[HTTP] GET... success!");
+      Serial.println("[HTTP] POST... success!");
       lcd.print("Success");
       success = true;
       break; // do not retry, continue function
     } else if (httpCode >= 400 && httpCode <= 499) {
       // 400 - 499: client error
-      Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+      Serial.printf("[HTTP] POST... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
       if (httpCode == 400) {  // server USUALLY responds with a Bad Request 400
         lcd.print("RFID not in DB");
         delay(3000);
@@ -151,8 +184,9 @@ void httpPostRFID(String uid) {
       break; // do not retry, continue function
     } else if (httpCode >= 500 && httpCode <= 599) {
       // 500 - 599: server error
-      Serial.printf("[HTTP] GET... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
+      Serial.printf("[HTTP] POST... failed, error: %s (%d) (WiFi-Status: %d)\n", http.errorToString(httpCode).c_str(), httpCode, WiFi.status());
       retries++;
+      delay(100);
       continue; // retry with new while iteration
     } else {
       // idk what to do with 300-399 & 100-199
