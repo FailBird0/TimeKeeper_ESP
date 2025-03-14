@@ -12,6 +12,8 @@ IPAddress ip;
 
 HTTPClient http;
 
+WiFiClientSecure client;
+
 #define RFID_SS_PIN 5    // SDA (SS) → GPIO 5
 #define RFID_RST_PIN 13  // ^ etc
 #define RFID_SCK_PIN 18
@@ -27,35 +29,9 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 // declaring RFID scanner
 MFRC522 mfrc522(RFID_SS_PIN, RFID_RST_PIN);
 
-const char* cert = R"(
------BEGIN CERTIFICATE-----
-
------END CERTIFICATE-----
-)";
-
 void setup() {
   // set I2C connection for LCD data & clock pins
   Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
-
-  // // initialize file system
-  // if (!SPIFFS.begin()) {
-  //   Serial.println("SPIFFS mount failed");
-  //   return;
-  // }
-
-  // // Load CA certificate
-  // File certFile = SPIFFS.open(CERTIFICATE_PATH, "r");
-  // if (!certFile) {
-  //   Serial.println("Failed to open cert file");
-  //   return;
-  // }
-
-  // // Read certificate into cert variable
-  // cert = "";
-  // while (certFile.available()) {
-  //   cert += (char)certFile.read();
-  // }
-  // certFile.close();
 
   Serial.begin(115200);
   
@@ -77,6 +53,10 @@ void setup() {
   Serial.println("Connected to WiFi");
   
   ip = WiFi.localIP();
+  
+  http.setReuse(false);
+  // if CA cert was present
+  // client.setCACert(test_root_ca);
   
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -126,11 +106,6 @@ void loop() {
 }
 
 void httpPostRFID(String uid) {
-  // set CA certificate for request
-  WiFiClientSecure client;
-  client.setCACert(cert);
-  Serial.println(cert);
-
   // link to API interface
   String url = String(SERVER_IP) + String(SERVER_PORT) + "/check";
 
@@ -139,6 +114,8 @@ void httpPostRFID(String uid) {
   String payload;
   serializeJson(doc, payload);  // converts doc into JSON, puts into payload as string
 
+  // disables CA validation
+  client.setInsecure();
   http.begin(client, url);
   http.setTimeout(10000);
   
