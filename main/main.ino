@@ -121,6 +121,7 @@ void httpPostRFID(String uid) {
   
   // !!! important
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Origin", ip.toString());
 
   int httpCode;
 
